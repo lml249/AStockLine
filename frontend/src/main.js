@@ -38,7 +38,7 @@ async function loadNetwork() {
         if (!res.ok) {
             if (res.status === 503) {
                 const detail = await res.json().catch(() => null);
-                throw new Error(detail?.detail || "缓存未就绪，请先运行 python -m scripts.preprocess");
+                throw new Error(detail?.detail || "缓存未就绪，请先运行 .venv/bin/python -m scripts.preprocess");
             }
             throw new Error(`HTTP ${res.status}`);
         }
@@ -58,7 +58,11 @@ async function loadNetwork() {
         drawHistogram(data.edges);
     } catch (err) {
         console.error("加载错误:", err);
-        alert("加载失败: " + err.message);
+        if (err instanceof TypeError && err.message === "Failed to fetch") {
+            alert(`加载失败: 无法连接后端 API (${API_BASE})。请确认后端已启动并监听 0.0.0.0:8000。`);
+        } else {
+            alert("加载失败: " + err.message);
+        }
     } finally {
         btn.disabled = false;
         loading.classList.remove("active");

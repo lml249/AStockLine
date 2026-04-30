@@ -12,11 +12,8 @@ except ImportError:
 # 项目根目录
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
-# 数据目录（可通过环境变量 ASTOCK_DATA_DIR 自定义）
-DATA_DIR = Path(os.environ.get("ASTOCK_DATA_DIR", PROJECT_ROOT / "data"))
-
-# 数据源选择：csv / clickhouse
-DATA_SOURCE = os.environ.get("ASTOCK_DATA_SOURCE", "csv").lower()
+# 数据源固定为 ClickHouse
+DATA_SOURCE = "clickhouse"
 
 # ClickHouse 连接配置
 CLICKHOUSE_HOST = os.environ.get("CLICKHOUSE_HOST", "")

@@ -5,46 +5,46 @@
 AStockLine 采用后端预计算 + 前端轻量可视化的架构。数据流如下：
 
 1. **数据源层** (`backend/data_loader/`)
-   - 支持多数据源：本地 CSV (`csv_loader.py`) 和远程 ClickHouse (`clickhouse_loader.py`)。
-   - 所有数据加载器必须返回相同的契约：`DataFrame(index=DatetimeIndex, columns=stock_code, values=close_price)`。
+   - 当前只支持远程 ClickHouse (`clickhouse_loader.py`)。
+   - loader 返回契约：`DataFrame(index=DatetimeIndex, columns=stock_code, values=close_price)`。
 
 2. **计算层** (`backend/compute/` & `backend/analysis/`)
    - 依赖标准化价格矩阵。
-   - 包含：日收益率计算、皮尔逊相关性计算、网络构建（基于阈值）、Louvain 社区检测和网络统计。
-   - 设计约束：此层不得直接访问底层数据库或文件，仅接收 DataFrame。
+   - 包含：日收益率计算、皮尔逊相关性计算、网络构建、Louvain 社区检测和网络统计。
+   - 此层不得直接访问 ClickHouse，仅接收 DataFrame。
 
 3. **预处理机制** (`scripts/preprocess.py`)
-   - 由于 4000+ 股票全量相关矩阵计算昂贵，项目在这一步预先计算结果。
-   - 输出序列化到 `backend/cache/` (pickle 和 json 格式)。
-   - **安全机制**：将数据源配置和执行环境写入 `cache_meta.json`，防止不同环境配置发生数据串扰。
+   - 全量相关矩阵计算昂贵，项目在这一步预先计算结果。
+   - 输出序列化到 `backend/cache/`。
+   - `cache_meta.json` 记录 ClickHouse host/database/table 和数据日期范围，防止缓存与当前配置不一致。
 
 4. **API 层** (`backend/api/`)
-   - FastAPI 轻量封装，负责向前端提供查询接口。
-   - **混合模式**：不带日期参数的请求直接读取预处理生成的 JSON；带日期的请求读取缓存的收益率矩阵进行实时切片计算。
-   - 包含启动时验证（校验 `cache_meta.json` 有效性）。
+   - FastAPI 向前端提供查询接口。
+   - 不带日期参数的请求读取预处理 JSON；带日期参数的请求读取缓存收益率矩阵并按日期切片计算。
+   - 启动和请求时都会校验 `cache_meta.json`。
 
-## 数据源配置
+## ClickHouse 配置
 
-修改环境中的 `ASTOCK_DATA_SOURCE` 环境变量进行数据源切换：
+项目通过 `.env` 或环境变量读取以下配置：
 
-### CSV 模式 (默认)
-- 数据流：`data/` 目录下的 `.csv` 文件 -> Pandas DataFrame。
-- 使用：适合本地测试与单机部署。
+- `CLICKHOUSE_HOST`
+- `CLICKHOUSE_PORT`
+- `CLICKHOUSE_DATABASE`
+- `CLICKHOUSE_USER`
+- `CLICKHOUSE_PASSWORD`
+- `CLICKHOUSE_TABLE`
 
-### ClickHouse 模式
-- 数据流：连接目标 ClickHouse，执行 SQL 提取 -> Pandas DataFrame。
-- 配置项：
-  - `CLICKHOUSE_HOST`
-  - `CLICKHOUSE_PORT`
-  - `CLICKHOUSE_DATABASE`
-  - `CLICKHOUSE_USER`
-  - `CLICKHOUSE_PASSWORD`
-  - `CLICKHOUSE_TABLE` (需确保包含 `ts_code`, `trade_date`, `close`, `turnover_rate` 字段)。
-- 使用 `FINAL` 关键字和按日期聚合的最后一条记录作为多重复数据防护策略。
+目标表至少需要字段：
 
-## 添加新数据源
+- `ts_code`
+- `trade_date`
+- `close`
+- `turnover_rate`
 
-要添加例如 MySQL 或 API 实时拉取等新数据源：
-1. 在 `data_loader/` 目录下创建新的 loader，暴露 `load_all_stocks(start_date=None, end_date=None) -> pd.DataFrame` 方法。
-2. 在 `config/settings.py` 里添加相应的环境变量。
-3. 在 `scripts/preprocess.py` 和 `backend/api/main.py` 的 cache_meta 相关验证中添加支持路由。
+`trade_date` 在库中为 `YYYYMMDD` 字符串；Python/API 层使用 `YYYY-MM-DD`，loader 查询前会转换格式。
+
+## 数据口径
+
+- `turnover_rate > 0` 用作停牌日的近似过滤。
+- 当前表没有 ST 字段，因此不能严格过滤 ST 股票。
+- `close` 是否为后复权价格取决于 ClickHouse 表数据本身，需要在数据源侧确认。

@@ -8,22 +8,21 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from backend.config.settings import (
-    DATA_SOURCE, CACHE_DIR, CORRELATION_THRESHOLD,
-    ROLLING_WINDOW_SIZE, ROLLING_STEP_SIZE,
+    CACHE_DIR,
+    CLICKHOUSE_DATABASE,
+    CLICKHOUSE_HOST,
+    CLICKHOUSE_TABLE,
+    CORRELATION_THRESHOLD,
+    DATA_SOURCE,
+    ROLLING_STEP_SIZE,
+    ROLLING_WINDOW_SIZE,
 )
+from backend.data_loader.clickhouse_loader import load_all_stocks
 from backend.compute.returns import compute_returns
 from backend.compute.correlation import compute_correlation_matrix, compute_rolling_correlations
 from backend.compute.network_builder import build_network, get_network_stats
 from backend.analysis.clustering import detect_communities
 from backend.analysis.centrality import compute_centrality
-
-# 根据 DATA_SOURCE 选择数据加载器
-if DATA_SOURCE == "clickhouse":
-    from backend.data_loader.clickhouse_loader import load_all_stocks
-elif DATA_SOURCE == "csv":
-    from backend.data_loader.csv_loader import load_all_stocks
-else:
-    raise ValueError(f"不支持的数据源: {DATA_SOURCE}")
 
 
 def build_network_json(corr, threshold):
@@ -129,23 +128,16 @@ def main():
 
     # 写入缓存元数据
     cache_meta = {
-        "data_source": DATA_SOURCE,
+        "data_source": "clickhouse",
         "date_start": str(price_matrix.index.min().date()),
         "date_end": str(price_matrix.index.max().date()),
         "stock_count": price_matrix.shape[1],
         "trading_days": price_matrix.shape[0],
         "generated_at": datetime.now(timezone.utc).astimezone().isoformat(),
+        "clickhouse_host": CLICKHOUSE_HOST,
+        "clickhouse_database": CLICKHOUSE_DATABASE,
+        "clickhouse_table": CLICKHOUSE_TABLE,
     }
-    if DATA_SOURCE == "clickhouse":
-        from backend.config.settings import (
-            CLICKHOUSE_HOST, CLICKHOUSE_DATABASE, CLICKHOUSE_TABLE,
-        )
-        cache_meta["clickhouse_host"] = CLICKHOUSE_HOST
-        cache_meta["clickhouse_database"] = CLICKHOUSE_DATABASE
-        cache_meta["clickhouse_table"] = CLICKHOUSE_TABLE
-    elif DATA_SOURCE == "csv":
-        from backend.config.settings import DATA_DIR
-        cache_meta["csv_data_dir"] = str(DATA_DIR)
 
     with open(CACHE_DIR / "cache_meta.json", "w", encoding="utf-8") as f:
         json.dump(cache_meta, f, ensure_ascii=False, indent=2)

@@ -95,11 +95,11 @@ def load_all_stocks(
         ORDER BY trade_date, ts_code
     """
 
+    client = _get_client()
     print(f"  ClickHouse 查询: {CLICKHOUSE_HOST}:{CLICKHOUSE_PORT}/{CLICKHOUSE_DATABASE}.{safe_table}")
     if ch_start or ch_end:
         print(f"  日期范围: {ch_start or '(无限制)'} ~ {ch_end or '(无限制)'}")
 
-    client = _get_client()
     try:
         result = client.query(query, parameters=params)
 

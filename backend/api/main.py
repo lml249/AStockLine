@@ -5,14 +5,17 @@ import json
 import logging
 import pickle
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 
-from backend.config.settings import CACHE_DIR, DATA_SOURCE
-from backend.compute.returns import compute_returns
+from backend.config.settings import (
+    CACHE_DIR,
+    CLICKHOUSE_HOST,
+    CLICKHOUSE_DATABASE,
+    CLICKHOUSE_TABLE,
+)
 from backend.compute.correlation import compute_correlation_matrix
 from backend.compute.network_builder import build_network, get_network_stats
 from backend.analysis.clustering import detect_communities
@@ -41,42 +44,45 @@ def _validate_cache_meta():
     """
     meta = _load_cache_meta()
     if meta is None:
+        if not CLICKHOUSE_HOST:
+            return False, (
+                "尚未配置 ClickHouse。请在项目根目录创建 .env，设置 "
+                "CLICKHOUSE_HOST、CLICKHOUSE_PORT、CLICKHOUSE_DATABASE、"
+                "CLICKHOUSE_USER、CLICKHOUSE_PASSWORD、CLICKHOUSE_TABLE，"
+                "然后运行 .venv/bin/python -m scripts.preprocess 生成缓存。"
+            )
         return False, (
             "缓存元数据 cache_meta.json 不存在。"
-            "请运行 python -m scripts.preprocess 生成缓存。"
+            "请运行 .venv/bin/python -m scripts.preprocess 生成缓存。"
         )
     cached_source = meta.get("data_source", "unknown")
-    if cached_source != DATA_SOURCE:
+    if cached_source != "clickhouse":
         return False, (
             f"缓存来源不匹配：缓存由 '{cached_source}' 生成，"
-            f"但当前配置为 '{DATA_SOURCE}'。"
-            f"请重新运行 python -m scripts.preprocess。"
+            "但当前版本只支持 'clickhouse'。"
+            f"请重新运行 .venv/bin/python -m scripts.preprocess。"
         )
-    # 进一步校验数据源参数是否一致
-    if DATA_SOURCE == "clickhouse":
-        from backend.config.settings import (
-            CLICKHOUSE_HOST, CLICKHOUSE_DATABASE, CLICKHOUSE_TABLE,
+    # 进一步校验 ClickHouse 参数是否一致
+    required_meta_keys = ("clickhouse_host", "clickhouse_database", "clickhouse_table")
+    missing_keys = [key for key in required_meta_keys if not meta.get(key)]
+    if missing_keys:
+        return False, (
+            f"缓存元数据缺少 ClickHouse 配置字段：{', '.join(missing_keys)}。"
+            f"请重新运行 .venv/bin/python -m scripts.preprocess。"
         )
-        mismatches = []
-        if meta.get("clickhouse_host") and meta["clickhouse_host"] != CLICKHOUSE_HOST:
-            mismatches.append(f"host: {meta['clickhouse_host']} → {CLICKHOUSE_HOST}")
-        if meta.get("clickhouse_database") and meta["clickhouse_database"] != CLICKHOUSE_DATABASE:
-            mismatches.append(f"database: {meta['clickhouse_database']} → {CLICKHOUSE_DATABASE}")
-        if meta.get("clickhouse_table") and meta["clickhouse_table"] != CLICKHOUSE_TABLE:
-            mismatches.append(f"table: {meta['clickhouse_table']} → {CLICKHOUSE_TABLE}")
-        if mismatches:
-            return False, (
-                f"ClickHouse 配置已变更（{', '.join(mismatches)}），"
-                f"请重新运行 python -m scripts.preprocess。"
-            )
-    elif DATA_SOURCE == "csv":
-        from backend.config.settings import DATA_DIR
-        if meta.get("csv_data_dir") and meta["csv_data_dir"] != str(DATA_DIR):
-            return False, (
-                f"CSV 数据目录已变更：缓存使用 '{meta['csv_data_dir']}'，"
-                f"当前配置为 '{DATA_DIR}'。"
-                f"请重新运行 python -m scripts.preprocess。"
-            )
+
+    mismatches = []
+    if meta["clickhouse_host"] != CLICKHOUSE_HOST:
+        mismatches.append(f"host: {meta['clickhouse_host']} → {CLICKHOUSE_HOST}")
+    if meta["clickhouse_database"] != CLICKHOUSE_DATABASE:
+        mismatches.append(f"database: {meta['clickhouse_database']} → {CLICKHOUSE_DATABASE}")
+    if meta["clickhouse_table"] != CLICKHOUSE_TABLE:
+        mismatches.append(f"table: {meta['clickhouse_table']} → {CLICKHOUSE_TABLE}")
+    if mismatches:
+        return False, (
+            f"ClickHouse 配置已变更（{', '.join(mismatches)}），"
+            f"请重新运行 .venv/bin/python -m scripts.preprocess。"
+        )
     return True, None
 
 
@@ -115,7 +121,7 @@ def _load_returns() -> pd.DataFrame:
         if not path.exists():
             raise HTTPException(
                 status_code=503,
-                detail="请先运行 python -m scripts.preprocess",
+                detail="请先运行 .venv/bin/python -m scripts.preprocess",
             )
         with open(path, "rb") as f:
             _cache["returns"] = pickle.load(f)
@@ -130,7 +136,7 @@ def _load_corr() -> pd.DataFrame:
         if not path.exists():
             raise HTTPException(
                 status_code=503,
-                detail="请先运行 python -m scripts.preprocess",
+                detail="请先运行 .venv/bin/python -m scripts.preprocess",
             )
         with open(path, "rb") as f:
             _cache["corr"] = pickle.load(f)

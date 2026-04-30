@@ -24,9 +24,8 @@ A股股票价格走势关系网络分析工具。
 
 ```
 backend/
-├── config/settings.py                  # 全局配置（数据源选择 + ClickHouse 连接）
+├── config/settings.py                  # 全局配置（ClickHouse 连接）
 ├── data_loader/
-│   ├── csv_loader.py                   # CSV 数据加载与清洗
 │   └── clickhouse_loader.py            # ClickHouse 数据加载
 ├── compute/
 │   ├── returns.py                      # 日收益率计算
@@ -37,7 +36,7 @@ backend/
 │   ├── centrality.py                   # 度中心性
 │   └── dynamics.py                     # 滚动窗口动态分析（预留）
 ├── api/main.py                         # FastAPI服务（混合缓存+实时模式 + 缓存校验）
-scripts/preprocess.py                   # 预处理脚本（自动选择数据源 + 写入缓存元数据）
+scripts/preprocess.py                   # 预处理脚本（ClickHouse + 写入缓存元数据）
 .env.example                            # 环境变量模板
 
 frontend/
@@ -50,30 +49,16 @@ frontend/
 ### 1. 环境准备
 
 ```bash
-# 安装Python依赖
-cd backend
-pip install -r requirements.txt
+# 创建虚拟环境并安装 Python 依赖
+python3 -m venv .venv
+.venv/bin/pip install -r backend/requirements.txt
 ```
 
-### 2. 配置数据源
+### 2. 配置 ClickHouse
 
-项目支持两种数据源模式：**CSV**（默认）和 **ClickHouse**。
-
-#### 模式 A：CSV（默认）
-
-将CSV数据放入 `data/` 目录（或通过 `ASTOCK_DATA_DIR` 环境变量指定路径）：
+项目只支持 ClickHouse 数据源。配置 ClickHouse 连接环境变量：
 
 ```bash
-export ASTOCK_DATA_SOURCE=csv
-export ASTOCK_DATA_DIR=/path/to/csv/data
-```
-
-#### 模式 B：ClickHouse
-
-配置 ClickHouse 连接环境变量：
-
-```bash
-export ASTOCK_DATA_SOURCE=clickhouse
 export CLICKHOUSE_HOST=<your-server-ip>
 export CLICKHOUSE_PORT=8123
 export CLICKHOUSE_DATABASE=default
@@ -87,7 +72,7 @@ export CLICKHOUSE_TABLE=tushare_daily_basic
 ### 3. 数据预处理
 
 ```bash
-python3 -m scripts.preprocess
+.venv/bin/python -m scripts.preprocess
 ```
 
 预处理输出：
@@ -96,13 +81,13 @@ python3 -m scripts.preprocess
 - `cache/network_t50.json` ~ `network_t90.json` - 不同阈值的预计算网络
 - `cache/cache_meta.json` - 缓存元数据（数据源、日期范围等）
 
-> **注意**：切换数据源后必须重新运行预处理。API 启动时会校验 `cache_meta.json`，如果当前数据源与缓存来源不一致会报错。
+> **注意**：修改 ClickHouse 主机、数据库或表名后必须重新运行预处理。API 启动时会校验 `cache_meta.json`，如果当前配置与缓存来源不一致会报错。
 
 ### 4. 启动服务
 
 ```bash
 # 终端1：启动后端API（端口8000，从项目根目录运行，允许局域网访问）
-uvicorn backend.api.main:app --reload --host 0.0.0.0 --port 8000
+.venv/bin/uvicorn backend.api.main:app --reload --host 0.0.0.0 --port 8000
 
 # 终端2：启动前端（端口5173，允许局域网访问）
 cd frontend
@@ -115,42 +100,7 @@ python3 -m http.server 5173 --bind 0.0.0.0
 
 ## 数据准备
 
-本项目**不包含股票数据**，你需要自行准备数据。支持 CSV 文件或 ClickHouse 数据库两种数据源。
-
-### CSV 模式
-
-默认读取项目根目录下的 `data/` 文件夹，也可通过环境变量自定义：
-
-```bash
-# Linux/macOS
-export ASTOCK_DATA_DIR=/path/to/your/csv/data
-
-# Windows PowerShell
-$env:ASTOCK_DATA_DIR = "D:\your\csv\data"
-```
-
-#### CSV格式要求
-
-每只股票一个CSV文件，文件名任意。每个CSV必须包含以下列：
-
-| 列名 | 说明 | 示例 |
-|------|------|------|
-| 证券代码 | 股票代码 | 000001.SZ |
-| 日期 | 交易日期 | 2024-01-02 |
-| 收盘 | 收盘价（后复权） | 15.32 |
-| 是否ST | ST标记（可选） | 0 或 1 |
-
-其他可选列：开盘、最高、最低、成交量、成交额、昨收、均价、涨停价、跌停价、前复权因子、是否停牌
-
-```
-data/
-├── 000001.csv
-├── 000002.csv
-├── 600000.csv
-└── ...
-```
-
-### ClickHouse 模式
+本项目**不包含股票数据**，你需要自行准备 ClickHouse 数据库。
 
 需要一个包含日线行情数据的 ClickHouse 表（如 tushare_daily_basic），至少包含以下字段：
 
