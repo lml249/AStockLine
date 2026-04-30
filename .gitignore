@@ -1,0 +1,46 @@
+# 数据目录
+中证全指历史日级别价格_后复权/
+data/
+
+# 文档
+# (已开放 docs 目录跟踪)
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+
+# 缓存
+backend/cache/*.pkl
+backend/cache/*.json
+!backend/cache/.gitkeep
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+frontend/dist/
+
+# 日志
+*.log
+
+# github
+.github/
+
+# docs

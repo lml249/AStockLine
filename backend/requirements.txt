@@ -1,0 +1,9 @@
+pandas>=2.0
+numpy>=1.24
+scipy>=1.10
+networkx>=3.0
+python-louvain>=0.16
+fastapi>=0.100
+uvicorn>=0.22
+clickhouse-connect>=0.7
+python-dotenv>=1.0
